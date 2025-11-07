@@ -1,4 +1,3 @@
-
 package helper
 
 import (
@@ -61,11 +60,7 @@ func (h *MahasiswaHelper) GetAllMahasiswa(c *fiber.Ctx) error {
 }
 
 func (h *MahasiswaHelper) GetMahasiswaByID(c *fiber.Ctx) error {
-	id, err := strconv.Atoi(c.Params("id"))
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "ID tidak valid"})
-	}
-
+	id := c.Params("id") // ID is now a string
 	mahasiswa, err := h.mahasiswaService.GetMahasiswaByID(c.Context(), id)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
@@ -74,10 +69,7 @@ func (h *MahasiswaHelper) GetMahasiswaByID(c *fiber.Ctx) error {
 }
 
 func (h *MahasiswaHelper) UpdateMahasiswa(c *fiber.Ctx) error {
-	id, err := strconv.Atoi(c.Params("id"))
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "ID tidak valid"})
-	}
+	id := c.Params("id") // ID is now a string
 
 	var req model.UpdateMahasiswaRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -92,15 +84,9 @@ func (h *MahasiswaHelper) UpdateMahasiswa(c *fiber.Ctx) error {
 }
 
 func (h *MahasiswaHelper) DeleteMahasiswa(c *fiber.Ctx) error {
-	id, err := strconv.Atoi(c.Params("id"))
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "ID tidak valid"})
-	}
-
+	id := c.Params("id") // ID is now a string
 	if err := h.mahasiswaService.DeleteMahasiswa(c.Context(), id); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
-
-

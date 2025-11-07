@@ -1,4 +1,3 @@
-
 package service
 
 import (
@@ -33,29 +32,26 @@ func (s *alumniService) GetAllAlumni(ctx context.Context, params model.Paginatio
 	return s.alumniRepo.FindAll(ctx, params)
 }
 
-func (s *alumniService) GetAlumniByID(ctx context.Context, id int) (*model.Alumni, error) {
+func (s *alumniService) GetAlumniByID(ctx context.Context, id string) (*model.Alumni, error) {
 	return s.alumniRepo.FindByID(ctx, id)
 }
 
-func (s *alumniService) UpdateAlumni(ctx context.Context, id int, req *model.UpdateAlumniRequest) (*model.Alumni, error) {
-	alumni, err := s.alumniRepo.FindByID(ctx, id)
-	if err != nil {
-		return nil, err
+func (s *alumniService) UpdateAlumni(ctx context.Context, id string, req *model.UpdateAlumniRequest) (*model.Alumni, error) {
+	// Find is not necessary here, repository update can handle it
+	// Or, if we need to merge, we find first. Let's let repo handle it.
+	alumni := &model.Alumni{
+		Nama:       req.Nama,
+		Jurusan:    req.Jurusan,
+		Angkatan:   req.Angkatan,
+		TahunLulus: req.TahunLulus,
+		Email:      req.Email,
+		NoTelepon:  req.NoTelepon,
+		Alamat:     req.Alamat,
 	}
 
-	alumni.Nama = req.Nama
-	alumni.Jurusan = req.Jurusan
-	alumni.Angkatan = req.Angkatan
-	alumni.TahunLulus = req.TahunLulus
-	alumni.Email = req.Email
-	alumni.NoTelepon = req.NoTelepon
-	alumni.Alamat = req.Alamat
-
-	return s.alumniRepo.Update(ctx, alumni)
+	return s.alumniRepo.Update(ctx, id, alumni)
 }
 
-func (s *alumniService) DeleteAlumni(ctx context.Context, id int) error {
+func (s *alumniService) DeleteAlumni(ctx context.Context, id string) error {
 	return s.alumniRepo.Delete(ctx, id)
 }
-
-

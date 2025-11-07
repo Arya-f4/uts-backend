@@ -1,5 +1,3 @@
-
-
 package service
 
 import (
@@ -52,7 +50,7 @@ func (u *authService) Login(ctx context.Context, req *model.LoginRequest) (strin
 	}
 
 	claims := jwt.MapClaims{
-		"user_id": user.ID,
+		"user_id": user.ID.Hex(), // Use Hex() for string representation of ObjectID
 		"email":   user.Email,
 		"roles":   user.Roles,
 		"exp":     time.Now().Add(u.jwtExpirationHours).Unix(),
@@ -67,5 +65,3 @@ func (u *authService) Login(ctx context.Context, req *model.LoginRequest) (strin
 
 	return tokenString, nil
 }
-
-

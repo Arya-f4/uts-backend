@@ -1,4 +1,3 @@
-
 package middleware
 
 import (
@@ -14,7 +13,7 @@ func AuthMiddleware(secret string) fiber.Handler {
 			token := c.Locals("user").(*jwt.Token)
 			claims := token.Claims.(jwt.MapClaims)
 
-			userID, ok := claims["user_id"].(float64)
+			userID, ok := claims["user_id"].(string) // ID is now a string (ObjectID hex)
 			if !ok {
 				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Klaim user_id tidak valid"})
 			}
@@ -29,7 +28,7 @@ func AuthMiddleware(secret string) fiber.Handler {
 				roles = append(roles, role.(string))
 			}
 
-			c.Locals("user_id", int(userID))
+			c.Locals("user_id", userID) // Store as string
 			c.Locals("roles", roles)
 
 			return c.Next()
@@ -60,5 +59,3 @@ func RoleMiddleware(requiredRole string) fiber.Handler {
 		})
 	}
 }
-
-

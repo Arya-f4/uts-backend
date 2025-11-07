@@ -2,7 +2,6 @@ package helper
 
 import (
 	"golang-train/app/service"
-	"strconv"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -17,15 +16,15 @@ func NewUserHelper(s service.UserService) *UserHelper {
 }
 
 func (h *UserHelper) DeleteUser(c *fiber.Ctx) error {
-	targetUserID, err := strconv.Atoi(c.Params("id"))
-	if err != nil {
+	targetUserID := c.Params("id")
+	if targetUserID == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "ID pengguna tidak valid"})
 	}
 
-	requestingUserID := c.Locals("user_id").(int)
+	requestingUserID := c.Locals("user_id").(string) // Now a string
 	requestingUserRoles := c.Locals("roles").([]string)
 
-	err = h.userService.DeleteUser(c.Context(), requestingUserID, requestingUserRoles, targetUserID)
+	err := h.userService.DeleteUser(c.Context(), requestingUserID, requestingUserRoles, targetUserID)
 	if err != nil {
 		if strings.Contains(err.Error(), "forbidden") {
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
@@ -36,15 +35,15 @@ func (h *UserHelper) DeleteUser(c *fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 func (h *UserHelper) RestoreUser(c *fiber.Ctx) error {
-	targetUserID, err := strconv.Atoi(c.Params("id"))
-	if err != nil {
+	targetUserID := c.Params("id")
+	if targetUserID == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "ID pengguna tidak valid"})
 	}
 
-	requestingUserID := c.Locals("user_id").(int)
+	requestingUserID := c.Locals("user_id").(string) // Now a string
 	requestingUserRoles := c.Locals("roles").([]string)
 
-	err = h.userService.RestoreUser(c.Context(), requestingUserID, requestingUserRoles, targetUserID)
+	err := h.userService.RestoreUser(c.Context(), requestingUserID, requestingUserRoles, targetUserID)
 	if err != nil {
 		if strings.Contains(err.Error(), "forbidden") {
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": err.Error()})

@@ -10,7 +10,8 @@ import (
 )
 
 type Config struct {
-	DatabaseURL        string
+	MongoDBURI         string
+	MongoDBName        string
 	ServerPort         string
 	JWTSecretKey       string
 	JWTExpirationHours time.Duration
@@ -21,18 +22,11 @@ func LoadConfig() (*Config, error) {
 		fmt.Println("File .env tidak ditemukan, membaca dari environment variables")
 	}
 
-	dbUser := getEnv("DB_USER", "dsiunair")
-	dbPassword := getEnv("DB_PASSWORD", "root")
-	dbHost := getEnv("DB_HOST", "localhost")
-	dbPort := getEnv("DB_PORT", "5432")
-	dbName := getEnv("DB_NAME", "golang-train")
-	dbSSLMode := getEnv("DB_SSLMODE", "disable")
-
-	databaseURL := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
-		dbUser, dbPassword, dbHost, dbPort, dbName, dbSSLMode)
+	mongoURI := getEnv("MONGODB_URI", "mongodb://localhost:27017")
+	mongoDBName := getEnv("MONGODB_NAME", "golang-train")
 
 	serverPort := getEnv("SERVER_PORT", "4000")
-	jwtSecret := getEnv("JWT_SECRET_KEY", "default_secret_key")
+	jwtSecret := getEnv("JWT_SECRET_KEY", "ApalahR4has!a!N!")
 	jwtExpHoursStr := getEnv("JWT_EXPIRATION_HOURS", "72")
 
 	jwtExpHours, err := strconv.Atoi(jwtExpHoursStr)
@@ -41,7 +35,8 @@ func LoadConfig() (*Config, error) {
 	}
 
 	return &Config{
-		DatabaseURL:        databaseURL,
+		MongoDBURI:         mongoURI,
+		MongoDBName:        mongoDBName,
 		ServerPort:         serverPort,
 		JWTSecretKey:       jwtSecret,
 		JWTExpirationHours: time.Duration(jwtExpHours) * time.Hour,

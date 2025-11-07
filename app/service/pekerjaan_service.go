@@ -7,7 +7,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/gofiber/fiber/v2" // Tambahkan import fiber
+	"github.com/gofiber/fiber/v2"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type pekerjaanService struct {
@@ -18,14 +19,17 @@ func NewPekerjaanService(repo repository.PekerjaanRepository) PekerjaanService {
 	return &pekerjaanService{repo: repo}
 }
 
-// CreatePekerjaan sekarang menangani HTTP request dan response
 func (s *pekerjaanService) CreatePekerjaan(c *fiber.Ctx) error {
 	var req model.CreatePekerjaanRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "tidak dapat mem-parsing JSON"})
 	}
 
-	// Logika bisnis tetap di sini
+	alumniObjID, err := primitive.ObjectIDFromHex(req.AlumniID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Alumni ID tidak valid"})
+	}
+
 	tanggalMulai, err := time.Parse("2006-01-02", req.TanggalMulaiKerja)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": fmt.Sprintf("format tanggal mulai kerja tidak valid: %v", err)})
@@ -40,7 +44,7 @@ func (s *pekerjaanService) CreatePekerjaan(c *fiber.Ctx) error {
 	}
 
 	pekerjaan := &model.Pekerjaan{
-		AlumniID:            req.AlumniID,
+		AlumniID:            alumniObjID,
 		NamaPerusahaan:      req.NamaPerusahaan,
 		PosisiJabatan:       req.PosisiJabatan,
 		BidangIndustri:      req.BidangIndustri,
@@ -94,11 +98,7 @@ func (s *pekerjaanService) GetAllPekerjaanDeleted(c *fiber.Ctx) error {
 }
 
 func (s *pekerjaanService) GetPekerjaanByID(c *fiber.Ctx) error {
-	id, err := strconv.Atoi(c.Params("id"))
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "ID tidak valid"})
-	}
-
+	id := c.Params("id") // ID is now a string
 	pekerjaan, err := s.repo.FindByID(c.Context(), id)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
@@ -107,22 +107,17 @@ func (s *pekerjaanService) GetPekerjaanByID(c *fiber.Ctx) error {
 }
 
 func (s *pekerjaanService) UpdatePekerjaan(c *fiber.Ctx) error {
-	id, err := strconv.Atoi(c.Params("id"))
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "ID tidak valid"})
-	}
+	id := c.Params("id") // ID is now a string
 
 	var req model.UpdatePekerjaanRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "tidak dapat mem-parsing JSON"})
 	}
 
-	pekerjaan, err := s.repo.FindByID(c.Context(), id)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
-	}
+	// We fetch first to get the existing AlumniID, or let the repo handle a partial update
+	// For this migration, we'll pass a model with only the updated fields.
+	// The repository implementation will use $set, so AlumniID won't be touched.
 
-	// Logika bisnis pembaruan data
 	tanggalMulai, err := time.Parse("2006-01-02", req.TanggalMulaiKerja)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": fmt.Sprintf("format tanggal mulai kerja tidak valid: %v", err)})
@@ -136,17 +131,20 @@ func (s *pekerjaanService) UpdatePekerjaan(c *fiber.Ctx) error {
 		tanggalSelesai = &parsed
 	}
 
-	pekerjaan.NamaPerusahaan = req.NamaPerusahaan
-	pekerjaan.PosisiJabatan = req.PosisiJabatan
-	pekerjaan.BidangIndustri = req.BidangIndustri
-	pekerjaan.LokasiKerja = req.LokasiKerja
-	pekerjaan.GajiRange = req.GajiRange
-	pekerjaan.TanggalMulaiKerja = tanggalMulai
-	pekerjaan.TanggalSelesaiKerja = tanggalSelesai
-	pekerjaan.StatusPekerjaan = req.StatusPekerjaan
-	pekerjaan.DeskripsiPekerjaan = req.DeskripsiPekerjaan
+	// Create a Pekerjaan model with updated fields
+	pekerjaan := &model.Pekerjaan{
+		NamaPerusahaan:      req.NamaPerusahaan,
+		PosisiJabatan:       req.PosisiJabatan,
+		BidangIndustri:      req.BidangIndustri,
+		LokasiKerja:         req.LokasiKerja,
+		GajiRange:           req.GajiRange,
+		TanggalMulaiKerja:   tanggalMulai,
+		TanggalSelesaiKerja: tanggalSelesai,
+		StatusPekerjaan:     req.StatusPekerjaan,
+		DeskripsiPekerjaan:  req.DeskripsiPekerjaan,
+	}
 
-	updatedPekerjaan, err := s.repo.Update(c.Context(), pekerjaan)
+	updatedPekerjaan, err := s.repo.Update(c.Context(), id, pekerjaan)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -154,11 +152,7 @@ func (s *pekerjaanService) UpdatePekerjaan(c *fiber.Ctx) error {
 }
 
 func (s *pekerjaanService) DeletePekerjaan(c *fiber.Ctx) error {
-	id, err := strconv.Atoi(c.Params("id"))
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "ID tidak valid"})
-	}
-
+	id := c.Params("id")
 	if err := s.repo.Delete(c.Context(), id); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -166,11 +160,7 @@ func (s *pekerjaanService) DeletePekerjaan(c *fiber.Ctx) error {
 }
 
 func (s *pekerjaanService) SoftDeletePekerjaan(c *fiber.Ctx) error {
-	id, err := strconv.Atoi(c.Params("id"))
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "ID tidak valid"})
-	}
-
+	id := c.Params("id")
 	if err := s.repo.SoftDelete(c.Context(), id); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -178,11 +168,7 @@ func (s *pekerjaanService) SoftDeletePekerjaan(c *fiber.Ctx) error {
 }
 
 func (s *pekerjaanService) RestorePekerjaan(c *fiber.Ctx) error {
-	id, err := strconv.Atoi(c.Params("id"))
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "ID tidak valid"})
-	}
-
+	id := c.Params("id")
 	if err := s.repo.Restore(c.Context(), id); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}

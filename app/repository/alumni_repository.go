@@ -1,99 +1,91 @@
-// File Path: app/repository/alumni_repository.go
 package repository
 
 import (
 	"context"
 	"errors"
-	"fmt"
 	"golang-train/app/model"
 	"math"
 	"strings"
+	"time"
 
-	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// alumniRepository mengimplementasikan interface AlumniRepository.
 type alumniRepository struct {
-	db *pgxpool.Pool
+	db         *mongo.Database
+	collection *mongo.Collection
 }
 
-// NewAlumniRepository adalah constructor untuk alumniRepository.
+func NewAlumniRepository(db *mongo.Database) AlumniRepository {
+	return &alumniRepository{
+		db:         db,
+		collection: db.Collection("alumni"),
+	}
+}
 
-// Create menyimpan data alumni baru ke database.
 func (r *alumniRepository) Create(ctx context.Context, alumni *model.Alumni) (*model.Alumni, error) {
-	query := `INSERT INTO alumni (nim, nama, jurusan, angkatan, tahun_lulus, email, no_telepon, alamat)
-              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-              RETURNING id, created_at, updated_at`
-	err := r.db.QueryRow(ctx, query, alumni.NIM, alumni.Nama, alumni.Jurusan, alumni.Angkatan, alumni.TahunLulus, alumni.Email, alumni.NoTelepon, alumni.Alamat).Scan(&alumni.ID, &alumni.CreatedAt, &alumni.UpdatedAt)
-	return alumni, err
-}
+	alumni.ID = primitive.NewObjectID()
+	alumni.CreatedAt = time.Now()
+	alumni.UpdatedAt = time.Now()
 
-// FindAll mengambil daftar alumni dengan paginasi, sorting, dan searching.
-func (r *alumniRepository) FindAll(ctx context.Context, params model.PaginationParams) (*model.PaginationResult[model.Alumni], error) {
-	var args []interface{}
-	var whereClauses []string
-	argID := 1
-
-	baseQuery := `SELECT id, nim, nama, jurusan, angkatan, tahun_lulus, email, no_telepon, alamat, created_at, updated_at FROM alumni`
-	countQuery := `SELECT COUNT(id) FROM alumni`
-
-	// Menambahkan klausa WHERE untuk fungsionalitas pencarian.
-	if params.Search != "" {
-		whereClauses = append(whereClauses, fmt.Sprintf("(nama ILIKE $%d OR nim ILIKE $%d OR jurusan ILIKE $%d OR email ILIKE $%d)", argID, argID, argID, argID))
-		args = append(args, "%"+params.Search+"%")
-		argID++
-	}
-
-	if len(whereClauses) > 0 {
-		whereSQL := " WHERE " + strings.Join(whereClauses, " AND ")
-		baseQuery += whereSQL
-		countQuery += whereSQL
-	}
-
-	// Mendapatkan total jumlah data untuk paginasi.
-	var total int64
-	if err := r.db.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
-		return nil, err
-	}
-
-	// Menambahkan klausa ORDER BY untuk sorting.
-	validSortColumns := map[string]string{"nama": "nama", "nim": "nim", "angkatan": "angkatan", "tahun_lulus": "tahun_lulus", "created_at": "created_at"}
-	sortColumn := "created_at"
-	sortOrder := "DESC"
-	if params.Sort != "" {
-		parts := strings.Split(params.Sort, ":")
-		if mappedCol, ok := validSortColumns[strings.ToLower(parts[0])]; ok {
-			sortColumn = mappedCol
-		}
-		if len(parts) > 1 && strings.ToUpper(parts[1]) == "ASC" {
-			sortOrder = "ASC"
-		}
-	}
-	baseQuery += fmt.Sprintf(" ORDER BY %s %s", sortColumn, sortOrder)
-
-	// Menambahkan klausa LIMIT dan OFFSET untuk paginasi.
-	offset := (params.Page - 1) * params.Limit
-	baseQuery += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argID, argID+1)
-	args = append(args, params.Limit, offset)
-
-	// Menjalankan query utama untuk mendapatkan data.
-	rows, err := r.db.Query(ctx, baseQuery, args...)
+	_, err := r.collection.InsertOne(ctx, alumni)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	return alumni, nil
+}
 
-	alumniList := []model.Alumni{}
-	for rows.Next() {
-		var a model.Alumni
-		if err := rows.Scan(&a.ID, &a.NIM, &a.Nama, &a.Jurusan, &a.Angkatan, &a.TahunLulus, &a.Email, &a.NoTelepon, &a.Alamat, &a.CreatedAt, &a.UpdatedAt); err != nil {
-			return nil, err
+func (r *alumniRepository) FindAll(ctx context.Context, params model.PaginationParams) (*model.PaginationResult[model.Alumni], error) {
+	filter := bson.M{}
+	if params.Search != "" {
+		regex := bson.M{"$regex": params.Search, "$options": "i"}
+		filter["$or"] = []bson.M{
+			{"nama": regex},
+			{"nim": regex},
+			{"jurusan": regex},
+			{"email": regex},
 		}
-		alumniList = append(alumniList, a)
 	}
 
-	// Menghitung halaman terakhir.
+	total, err := r.collection.CountDocuments(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	opts := options.Find()
+	opts.SetLimit(int64(params.Limit))
+	opts.SetSkip(int64((params.Page - 1) * params.Limit))
+
+	sortColumn := "created_at"
+	sortOrder := -1 // desc
+	if params.Sort != "" {
+		parts := strings.Split(params.Sort, ":")
+		if len(parts) == 2 {
+			validCols := map[string]string{"nama": "nama", "nim": "nim", "angkatan": "angkatan", "tahun_lulus": "tahun_lulus", "created_at": "created_at"}
+			if col, ok := validCols[parts[0]]; ok {
+				sortColumn = col
+			}
+			if strings.ToUpper(parts[1]) == "ASC" {
+				sortOrder = 1
+			}
+		}
+	}
+	opts.SetSort(bson.D{{Key: sortColumn, Value: sortOrder}})
+
+	cursor, err := r.collection.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var alumniList []model.Alumni
+	if err = cursor.All(ctx, &alumniList); err != nil {
+		return nil, err
+	}
+
 	lastPage := int(math.Ceil(float64(total) / float64(params.Limit)))
 	if lastPage < 1 && total > 0 {
 		lastPage = 1
@@ -108,13 +100,17 @@ func (r *alumniRepository) FindAll(ctx context.Context, params model.PaginationP
 	}, nil
 }
 
-// FindByID mencari satu alumni berdasarkan ID.
-func (r *alumniRepository) FindByID(ctx context.Context, id int) (*model.Alumni, error) {
-	var a model.Alumni
-	query := `SELECT id, nim, nama, jurusan, angkatan, tahun_lulus, email, no_telepon, alamat, created_at, updated_at FROM alumni WHERE id = $1`
-	err := r.db.QueryRow(ctx, query, id).Scan(&a.ID, &a.NIM, &a.Nama, &a.Jurusan, &a.Angkatan, &a.TahunLulus, &a.Email, &a.NoTelepon, &a.Alamat, &a.CreatedAt, &a.UpdatedAt)
+func (r *alumniRepository) FindByID(ctx context.Context, id string) (*model.Alumni, error) {
+	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		return nil, errors.New("ID tidak valid")
+	}
+
+	var a model.Alumni
+	filter := bson.M{"_id": objID}
+	err = r.collection.FindOne(ctx, filter).Decode(&a)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
 			return nil, errors.New("alumni tidak ditemukan")
 		}
 		return nil, err
@@ -122,23 +118,58 @@ func (r *alumniRepository) FindByID(ctx context.Context, id int) (*model.Alumni,
 	return &a, nil
 }
 
-// Update memperbarui data alumni di database.
-func (r *alumniRepository) Update(ctx context.Context, alumni *model.Alumni) (*model.Alumni, error) {
-	query := `UPDATE alumni SET nama=$1, jurusan=$2, angkatan=$3, tahun_lulus=$4, email=$5, no_telepon=$6, alamat=$7, updated_at=NOW()
-              WHERE id=$8 RETURNING updated_at`
-	err := r.db.QueryRow(ctx, query, alumni.Nama, alumni.Jurusan, alumni.Angkatan, alumni.TahunLulus, alumni.Email, alumni.NoTelepon, alumni.Alamat, alumni.ID).Scan(&alumni.UpdatedAt)
-	return alumni, err
+func (r *alumniRepository) Update(ctx context.Context, id string, alumni *model.Alumni) (*model.Alumni, error) {
+	objID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return nil, errors.New("ID tidak valid")
+	}
+
+	update := bson.M{
+		"$set": bson.M{
+			"nama":        alumni.Nama,
+			"jurusan":     alumni.Jurusan,
+			"angkatan":    alumni.Angkatan,
+			"tahun_lulus": alumni.TahunLulus,
+			"email":       alumni.Email,
+			"no_telepon":  alumni.NoTelepon,
+			"alamat":      alumni.Alamat,
+			"updated_at":  time.Now(),
+		},
+	}
+
+	filter := bson.M{"_id": objID}
+	result, err := r.collection.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return nil, err
+	}
+	if result.MatchedCount == 0 {
+		return nil, errors.New("alumni tidak ditemukan")
+	}
+
+	alumni.ID = objID // Ensure the ID is set on the returned object
+	return alumni, nil
 }
 
-// Delete menghapus data alumni dari database.
-func (r *alumniRepository) Delete(ctx context.Context, id int) error {
-	query := `DELETE FROM alumni WHERE id = $1`
-	cmdTag, err := r.db.Exec(ctx, query, id)
+func (r *alumniRepository) Delete(ctx context.Context, id string) error {
+	objID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return errors.New("ID tidak valid")
+	}
+
+	filter := bson.M{"_id": objID}
+	result, err := r.collection.DeleteOne(ctx, filter)
 	if err != nil {
 		return err
 	}
-	if cmdTag.RowsAffected() != 1 {
+	if result.DeletedCount == 0 {
 		return errors.New("tidak ada baris yang ditemukan untuk dihapus")
 	}
 	return nil
+}
+
+// FindAllDeleted is not implemented for Alumni as it's a hard delete.
+func (r *alumniRepository) FindAllDeleted(ctx context.Context, params model.PaginationParams) (*model.PaginationResult[model.Alumni], error) {
+	return &model.PaginationResult[model.Alumni]{
+		Data: []model.Alumni{},
+	}, nil
 }

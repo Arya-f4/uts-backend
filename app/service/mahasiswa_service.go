@@ -1,4 +1,3 @@
-
 package service
 
 import (
@@ -30,26 +29,21 @@ func (s *mahasiswaService) GetAllMahasiswa(ctx context.Context, params model.Pag
 	return s.mahasiswaRepo.FindAll(ctx, params)
 }
 
-func (s *mahasiswaService) GetMahasiswaByID(ctx context.Context, id int) (*model.Mahasiswa, error) {
+func (s *mahasiswaService) GetMahasiswaByID(ctx context.Context, id string) (*model.Mahasiswa, error) {
 	return s.mahasiswaRepo.FindByID(ctx, id)
 }
 
-func (s *mahasiswaService) UpdateMahasiswa(ctx context.Context, id int, req *model.UpdateMahasiswaRequest) (*model.Mahasiswa, error) {
-	mahasiswa, err := s.mahasiswaRepo.FindByID(ctx, id)
-	if err != nil {
-		return nil, err
+func (s *mahasiswaService) UpdateMahasiswa(ctx context.Context, id string, req *model.UpdateMahasiswaRequest) (*model.Mahasiswa, error) {
+	mahasiswa := &model.Mahasiswa{
+		Nama:     req.Nama,
+		Jurusan:  req.Jurusan,
+		Angkatan: req.Angkatan,
+		Email:    req.Email,
 	}
 
-	mahasiswa.Nama = req.Nama
-	mahasiswa.Jurusan = req.Jurusan
-	mahasiswa.Angkatan = req.Angkatan
-	mahasiswa.Email = req.Email
-
-	return s.mahasiswaRepo.Update(ctx, mahasiswa)
+	return s.mahasiswaRepo.Update(ctx, id, mahasiswa)
 }
 
-func (s *mahasiswaService) DeleteMahasiswa(ctx context.Context, id int) error {
+func (s *mahasiswaService) DeleteMahasiswa(ctx context.Context, id string) error {
 	return s.mahasiswaRepo.Delete(ctx, id)
 }
-
-

@@ -1,4 +1,3 @@
-
 package main
 
 import (
@@ -14,12 +13,15 @@ func main() {
 		log.Fatalf("could not load config: %v", err)
 	}
 
-	dbPool := database.NewPostgresConnection(cfg)
-	defer dbPool.Close()
+	db, disconnect := database.NewMongoDBConnection(cfg)
+	defer disconnect()
+
+	// Run migrations (create indexes)
+	database.RunMigrations(db)
 
 	app := config.NewFiber()
 
-	router.SetupRoutes(app, dbPool, cfg)
+	router.SetupRoutes(app, db, cfg)
 
 	log.Printf("Server is running on port %s", cfg.ServerPort)
 	err = app.Listen(":" + cfg.ServerPort)
@@ -27,5 +29,3 @@ func main() {
 		log.Fatalf("Error starting server: %v", err)
 	}
 }
-
-

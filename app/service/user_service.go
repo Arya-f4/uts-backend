@@ -6,22 +6,20 @@ import (
 	"golang-train/app/repository"
 	"slices"
 
-	"github.com/jackc/pgx/v4/pgxpool"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type userService struct {
-	db       *pgxpool.Pool // Diperlukan untuk repository
 	userRepo repository.UserRepository
 }
 
-func NewUserService(db *pgxpool.Pool) UserService {
+func NewUserService(db *mongo.Database) UserService {
 	return &userService{
-		db:       db,
 		userRepo: repository.NewUserRepository(db),
 	}
 }
 
-func (s *userService) DeleteUser(ctx context.Context, requestingUserID int, requestingUserRoles []string, targetUserID int) error {
+func (s *userService) DeleteUser(ctx context.Context, requestingUserID string, requestingUserRoles []string, targetUserID string) error {
 	isAdmin := slices.Contains(requestingUserRoles, "admin")
 
 	if !isAdmin && requestingUserID != targetUserID {
@@ -35,11 +33,12 @@ func (s *userService) DeleteUser(ctx context.Context, requestingUserID int, requ
 
 	return nil
 }
-func (s *userService) RestoreUser(ctx context.Context, requestingUserID int, requestingUserRoles []string, targetUserID int) error {
+func (s *userService) RestoreUser(ctx context.Context, requestingUserID string, requestingUserRoles []string, targetUserID string) error {
 	isAdmin := slices.Contains(requestingUserRoles, "admin")
 
-	if !isAdmin && requestingUserID != targetUserID {
-		return errors.New("forbidden: Anda tidak memiliki izin untuk menghapus pengguna ini")
+	// Admin-only check is simpler for restore
+	if !isAdmin {
+		return errors.New("forbidden: Anda tidak memiliki izin untuk memulihkan pengguna ini")
 	}
 
 	err := s.userRepo.Restore(ctx, targetUserID)
